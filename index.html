@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ZAIB_BALOCH — Neon Hand AR</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@700;900&family=Space+Mono:wght@700&display=swap" rel="stylesheet"/>
+
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{--red:#ff2d55;--yel:#ffd60a;--cyn:#00e5ff;--pur:#bf5af2;--grn:#34c759;--accent:#00e5ff;}
+body{background:#050510;color:#fff;overflow:hidden;font-family:'Space Mono',monospace;}
+
+/* VIDEO + CANVAS */
+.video-wrap{position:absolute;inset:0;}
+.input_video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);filter:brightness(0.55) contrast(1.15);z-index:0;}
+#bgCanvas,#mainCanvas{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+#bgCanvas{z-index:1;pointer-events:none;}
+#mainCanvas{z-index:5;pointer-events:none;}
+
+/* START OVERLAY */
+#startOverlay{position:absolute;inset:0;background:rgba(5,5,16,0.95);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;backdrop-filter:blur(20px);transition:opacity 0.6s ease;}
+#startOverlay.hidden{opacity:0;pointer-events:none;}
+
+.start-logo{font-family:'Bebas Neue',sans-serif;font-size:clamp(52px,12vw,110px);line-height:1;letter-spacing:6px;text-align:center;margin-bottom:4px;}
+.start-logo .z{background:linear-gradient(90deg,#fff 30%,var(--yel));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.start-logo .b{background:linear-gradient(90deg,var(--red),var(--pur));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.start-tag{font-size:clamp(10px,2vw,14px);letter-spacing:5px;color:rgba(255,255,255,0.35);text-transform:uppercase;margin-bottom:48px;}
+
+.start-ring{position:relative;width:140px;height:140px;margin:0 auto 40px;}
+.ring{position:absolute;inset:0;border-radius:50%;border:2px solid transparent;animation:spin 3s linear infinite;}
+.ring1{border-top-color:var(--red);border-right-color:var(--red);animation-duration:2s;}
+.ring2{inset:12px;border-top-color:var(--yel);border-left-color:var(--yel);animation-direction:reverse;animation-duration:3s;}
+.ring3{inset:24px;border-bottom-color:var(--cyn);border-right-color:var(--cyn);animation-duration:1.5s;}
+.ring-center{position:absolute;inset:40px;background:radial-gradient(circle,rgba(255,45,85,0.3),transparent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.start-desc{font-size:12px;color:rgba(255,255,255,0.35);letter-spacing:2px;text-transform:uppercase;margin-bottom:36px;text-align:center;}
+
+.start-btn{padding:16px 48px;font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:4px;background:linear-gradient(135deg,var(--red),var(--pur));border:none;color:#fff;border-radius:50px;cursor:pointer;box-shadow:0 0 40px rgba(255,45,85,0.4),0 0 80px rgba(191,90,242,0.2);transition:transform 0.2s,box-shadow 0.2s;}
+.start-btn:hover{transform:scale(1.05);box-shadow:0 0 60px rgba(255,45,85,0.6),0 0 100px rgba(191,90,242,0.3);}
+
+.start-hint{margin-top:20px;font-size:10px;color:rgba(255,255,255,0.2);letter-spacing:2px;}
+
+/* SIGNATURE WATERMARK */
+.signature{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:20;text-align:center;pointer-events:none;}
+.sig-main{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:5px;}
+.sig-z{background:linear-gradient(90deg,#fff,var(--yel));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.sig-b{background:linear-gradient(90deg,var(--red),var(--pur));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.sig-tag{font-size:8px;letter-spacing:3px;color:rgba(255,255,255,0.2);text-transform:uppercase;margin-top:1px;}
+
+/* HUD */
+#hud{position:absolute;top:18px;left:18px;z-index:15;display:flex;flex-direction:column;gap:10px;pointer-events:none;}
+#hud.hidden{display:none;}
+.hud-panel{background:rgba(10,10,20,0.6);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 16px;}
+.hud-panel::before{content:'';display:block;height:1px;background:linear-gradient(90deg,var(--red),var(--pur));margin-bottom:10px;}
+.hud-row{display:flex;justify-content:space-between;gap:20px;font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;}
+.hud-row:last-child{margin-bottom:0;}
+.hud-val{color:var(--accent);font-weight:700;}
+
+/* BRAND TAG top right */
+.brand-tag{position:absolute;top:18px;right:18px;z-index:15;pointer-events:none;text-align:right;}
+.brand-name{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:4px;}
+.brand-name .bz{background:linear-gradient(90deg,#fff,var(--yel));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.brand-name .bb{background:linear-gradient(90deg,var(--red),var(--pur));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.brand-sub{font-size:8px;letter-spacing:2px;color:rgba(255,255,255,0.2);text-transform:uppercase;margin-top:1px;}
+
+/* GESTURE POPUP */
+#gesturePopup{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:20;font-family:'Bebas Neue',sans-serif;font-size:clamp(40px,8vw,80px);letter-spacing:6px;opacity:0;pointer-events:none;transition:opacity 0.15s;text-shadow:0 0 40px currentColor;}
+#gesturePopup.show{opacity:1;}
+
+/* THEMES BAR */
+#themes{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);z-index:15;display:flex;gap:8px;background:rgba(10,10,20,0.7);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.08);border-radius:30px;padding:7px;}
+#themes.hidden{display:none;}
+.theme-btn{background:transparent;border:1px solid transparent;color:rgba(255,255,255,0.4);padding:6px 14px;border-radius:20px;cursor:pointer;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;transition:all 0.2s;text-transform:uppercase;}
+.theme-btn.active{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:#fff;text-shadow:0 0 10px #fff;}
+</style>
+</head>
+<body>
+
+<!-- START SCREEN -->
+<div id="startOverlay">
+  <div class="start-logo">
+    <div><span class="z">ZAIB</span><span class="b">_BALOCH</span></div>
+  </div>
+  <div class="start-tag">Neon Hand AR Experience</div>
+  <div class="start-ring">
+    <div class="ring ring1"></div>
+    <div class="ring ring2"></div>
+    <div class="ring ring3"></div>
+    <div class="ring-center">✋</div>
+  </div>
+  <div class="start-desc">Camera ko haath dikhao — neon magic dekho</div>
+  <button class="start-btn" id="startBtn">EXPERIENCE SHURU KARO</button>
+  <div class="start-hint">Chrome recommended · Camera permission allow karein</div>
+</div>
+
+<!-- VIDEO + CANVAS -->
+<div class="video-wrap">
+  <video class="input_video" autoplay playsinline></video>
+  <canvas id="bgCanvas"></canvas>
+  <canvas id="mainCanvas"></canvas>
+</div>
+
+<!-- BRAND TOP RIGHT -->
+<div class="brand-tag">
+  <div class="brand-name"><span class="bz">ZAIB</span><span class="bb">_BALOCH</span></div>
+  <div class="brand-sub">Neon Hand AR</div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="hud-panel">
+    <div class="hud-row">Hands <span class="hud-val" id="ui-hands">0</span></div>
+    <div class="hud-row">FPS <span class="hud-val" id="ui-fps">0</span></div>
+  </div>
+  <div class="hud-panel">
+    <div class="hud-row">Gesture <span class="hud-val" id="ui-gesture">—</span></div>
+    <div class="hud-row">Spread <span class="hud-val" id="ui-spread">0%</span></div>
+  </div>
+</div>
+
+<!-- GESTURE POPUP -->
+<div id="gesturePopup"></div>
+
+<!-- THEMES -->
+<div id="themes" class="hidden">
+  <button class="theme-btn active" data-theme="Zaib">⭐ Zaib</button>
+  <button class="theme-btn" data-theme="Rainbow">Rainbow</button>
+  <button class="theme-btn" data-theme="Cyberpunk">Cyberpunk</button>
+  <button class="theme-btn" data-theme="Lava">Lava</button>
+  <button class="theme-btn" data-theme="Ocean">Ocean</button>
+  <button class="theme-btn" data-theme="Galaxy">Galaxy</button>
+</div>
+
+<!-- SIGNATURE BOTTOM -->
+<div class="signature">
+  <div class="sig-main"><span class="sig-z">ZAIB</span><span class="sig-b">_BALOCH</span></div>
+  <div class="sig-tag">Neon Hand AR · Pakistan 🇵🇰</div>
+</div>
+
+<script>
+// ============================================================
+// ZAIB_BALOCH — Neon Hand AR
+// ============================================================
+const videoEl = document.querySelector('.input_video');
+const bgCanvas = document.getElementById('bgCanvas');
+const mainCanvas = document.getElementById('mainCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+const ctx = mainCanvas.getContext('2d');
+
+let W = window.innerWidth, H = window.innerHeight;
+let time = 0, lastTime = performance.now();
+let fps = 0, fpsFrames = 0, lastFpsTime = performance.now();
+let currentHands = [], handVel = 0;
+let particles = [], ripples = [];
+let matrixCols = [];
+const FONT_SIZE = 16;
+let currentTheme = 'Zaib';
+
+// THEMES — Zaib signature theme added!
+const themes = {
+  'Zaib':      (t,i,n) => {const c=['#ff2d55','#ffd60a','#bf5af2','#00e5ff','#34c759'];return c[i%c.length];},
+  'Rainbow':   (t,i,n) => `hsl(${(t*80+i*(360/Math.max(n,1)))%360},100%,60%)`,
+  'Cyberpunk': (t,i,n) => i%2===0 ? '#ff003c' : '#00f0ff',
+  'Lava':      (t,i,n) => `hsl(${(10+i*8)%40},100%,${50+Math.sin(t)*10}%)`,
+  'Ocean':     (t,i,n) => `hsl(${180+i*18},100%,60%)`,
+  'Galaxy':    (t,i,n) => `hsl(${260+Math.sin(t*2+i)*40},100%,65%)`
+};
+
+const FINGER_TIPS = [4, 8, 12, 16, 20];
+
+// UI refs
+const uiHands   = document.getElementById('ui-hands');
+const uiFps     = document.getElementById('ui-fps');
+const uiGesture = document.getElementById('ui-gesture');
+const uiSpread  = document.getElementById('ui-spread');
+const gesturePopup = document.getElementById('gesturePopup');
+
+let popupTimer = null;
+function showGesture(text, color) {
+  gesturePopup.textContent = text;
+  gesturePopup.style.color = color;
+  gesturePopup.classList.add('show');
+  clearTimeout(popupTimer);
+  popupTimer = setTimeout(() => gesturePopup.classList.remove('show'), 800);
+}
+
+// RESIZE
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  bgCanvas.width = mainCanvas.width = W;
+  bgCanvas.height = mainCanvas.height = H;
+  const maxCols = Math.floor(W / FONT_SIZE);
+  matrixCols = Array.from({length: maxCols}, () => Math.random() * H / FONT_SIZE);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// THEME SWITCHER
+document.querySelectorAll('.theme-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    currentTheme = e.target.dataset.theme;
+  });
+});
+
+// START
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('themes').classList.remove('hidden');
+  initAudio();
+  initMediaPipe();
+  requestAnimationFrame(renderLoop);
+});
+
+// ============================================================
+// AUDIO
+// ============================================================
+let audioCtx = null, humOsc = null, humGain = null;
+
+function initAudio() {
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    humOsc = audioCtx.createOscillator();
+    humGain = audioCtx.createGain();
+    humOsc.type = 'sine';
+    humOsc.frequency.value = 110;
+    humGain.gain.value = 0;
+    humOsc.connect(humGain);
+    humGain.connect(audioCtx.destination);
+    humOsc.start();
+  } catch(e) { console.warn('Audio init failed', e); }
+}
+
+function triggerZap() {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.12);
+  g.gain.setValueAtTime(0.4, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+  osc.connect(g); g.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+}
+
+function updateHum(hands) {
+  if (!audioCtx || !humGain) return;
+  if (hands.length < 2) { humGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1); return; }
+  const p1 = hands[0][8], p2 = hands[1][8];
+  const d = Math.hypot(p1.x-p2.x, p1.y-p2.y);
+  humOsc.frequency.setTargetAtTime(110 + (1-Math.min(d,1))*280, audioCtx.currentTime, 0.1);
+  humGain.gain.setTargetAtTime(0.04 + (1-Math.min(d,1))*0.12, audioCtx.currentTime, 0.1);
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function dist(a, b) { return Math.hypot(a.x-b.x, a.y-b.y); }
+function toCanvas(p) { return {x: p.x*W, y: p.y*H}; }
+
+// ============================================================
+// GESTURES
+// ============================================================
+let lastPinch = [false, false];
+
+function detectGestures() {
+  if (!currentHands.length) return;
+  currentHands.forEach((hand, idx) => {
+    const th = hand[4], ix = hand[8];
+    const d = dist(th, ix);
+    const pinching = d < 0.05;
+    if (pinching && !lastPinch[idx]) {
+      const mid = {x:(th.x+ix.x)/2, y:(th.y+ix.y)/2};
+      createShockwave(toCanvas(mid), themes[currentTheme](time,1,1));
+      triggerZap();
+      showGesture('PINCH!', '#ff2d55');
+      uiGesture.textContent = 'PINCH!';
+    }
+    lastPinch[idx] = pinching;
+  });
+  if (currentHands[0]) {
+    const spread = dist(currentHands[0][8], currentHands[0][20]);
+    const pct = Math.min(Math.round(spread*300), 100);
+    uiSpread.textContent = pct+'%';
+    if (!lastPinch.includes(true)) {
+      const g = pct > 50 ? 'OPEN HAND' : 'FIST';
+      uiGesture.textContent = g;
+    }
+  }
+}
+
+// ============================================================
+// PARTICLES & EFFECTS
+// ============================================================
+function createParticles(pos, color, count=3) {
+  for (let i=0; i<count; i++) {
+    particles.push({
+      x:pos.x, y:pos.y,
+      vx:(Math.random()-0.5)*9,
+      vy:(Math.random()-0.5)*9,
+      life:1, color, size:Math.random()*3+1
+    });
+  }
+}
+
+function createShockwave(pos, color) {
+  ripples.push({x:pos.x, y:pos.y, radius:0, maxRadius:160+Math.random()*80, life:1, color});
+}
+
+// ============================================================
+// BACKGROUND — Matrix Rain with Zaib chars
+// ============================================================
+const ZAIB_CHARS = 'ZAIB_BALOCH0123456789アイウエオカキクケコ';
+
+function drawBackground() {
+  bgCtx.globalCompositeOperation = 'destination-out';
+  bgCtx.fillStyle = `rgba(0,0,0,${0.14 + Math.min(handVel*10, 0.45)})`;
+  bgCtx.fillRect(0, 0, W, H);
+  bgCtx.globalCompositeOperation = 'source-over';
+
+  const themeColor = themes[currentTheme](time, 1, 2);
+  bgCtx.fillStyle = themeColor;
+  bgCtx.font = FONT_SIZE + 'px "Space Mono", monospace';
+
+  const speedMult = 1 + handVel * 90;
+  for (let i=0; i<matrixCols.length; i++) {
+    if (Math.random() > 0.93) {
+      const ch = ZAIB_CHARS[Math.floor(Math.random()*ZAIB_CHARS.length)];
+      bgCtx.globalAlpha = 0.5 + Math.random()*0.5;
+      bgCtx.fillText(ch, i*FONT_SIZE, matrixCols[i]*FONT_SIZE);
+      bgCtx.globalAlpha = 1;
+    }
+    matrixCols[i] += Math.random() * speedMult;
+    if (matrixCols[i]*FONT_SIZE > H && Math.random() > 0.9) matrixCols[i] = 0;
+  }
+}
+
+// ============================================================
+// PHYSICS
+// ============================================================
+function updatePhysics() {
+  for (let i=particles.length-1; i>=0; i--) {
+    const p = particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.life-=0.022; p.vy+=0.12;
+    if (p.life <= 0) { particles.splice(i,1); continue; }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.fill();
+  }
+  for (let i=ripples.length-1; i>=0; i--) {
+    const r = ripples[i];
+    r.radius += (r.maxRadius - r.radius) * 0.1;
+    r.life -= 0.028;
+    if (r.life <= 0) { ripples.splice(i,1); continue; }
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.radius, 0, Math.PI*2);
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = 4 * r.life;
+    ctx.globalAlpha = r.life;
+    ctx.stroke();
+    // Inner ring
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.radius*0.5, 0, Math.PI*2);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2 * r.life;
+    ctx.globalAlpha = r.life * 0.4;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ============================================================
+// RENDER LOOP
+// ============================================================
+function renderLoop(ts) {
+  requestAnimationFrame(renderLoop);
+  const dt = (ts - lastTime) / 1000;
+  lastTime = ts;
+  time += dt;
+
+  fpsFrames++;
+  if (ts > lastFpsTime + 1000) {
+    uiFps.textContent = fpsFrames;
+    fpsFrames = 0;
+    lastFpsTime = ts;
+  }
+
+  drawBackground();
+
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'screen';
+
+  updatePhysics();
+
+  if (currentHands.length > 0) {
+
+    // Draw skeleton + particles per hand
+    currentHands.forEach((hand, hi) => {
+      const glow = themes[currentTheme](time, hi, 2);
+
+      // Skeleton connectors
+      drawConnectors(ctx, hand, HAND_CONNECTIONS, {color: glow, lineWidth: 2});
+
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = glow;
+
+      // All landmarks subtle dots
+      hand.forEach((lm, li) => {
+        if (FINGER_TIPS.includes(li)) return; // handled separately
+        const pt = toCanvas(lm);
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 3, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fill();
+      });
+
+      // Fingertips — bright + particles
+      FINGER_TIPS.forEach((ti, idx) => {
+        const pt = toCanvas(hand[ti]);
+        const tipColor = themes[currentTheme](time, idx, FINGER_TIPS.length);
+
+        // Bloom circle
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 7, 0, Math.PI*2);
+        ctx.fillStyle = tipColor;
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = tipColor;
+        ctx.fill();
+
+        // Inner white dot
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 3, 0, Math.PI*2);
+        ctx.fillStyle = '#fff';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#fff';
+        ctx.fill();
+
+        // Particles
+        if (Math.random() > 0.55) createParticles(pt, tipColor, 2);
+      });
+      ctx.shadowBlur = 0;
+    });
+
+    // Cross-hand effects (2 hands)
+    if (currentHands.length >= 2) {
+      const h1 = currentHands[0], h2 = currentHands[1];
+
+      FINGER_TIPS.forEach((ti, idx) => {
+        const p1 = toCanvas(h1[ti]);
+        const p2 = toCanvas(h2[ti]);
+        const d = Math.hypot(p1.x-p2.x, p1.y-p2.y);
+        const col = themes[currentTheme](time, idx, FINGER_TIPS.length);
+
+        // Lightning when close
+        if (d < 160 && Math.random() > 0.4) {
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          const mx = (p1.x+p2.x)/2 + (Math.random()-0.5)*60;
+          const my = (p1.y+p2.y)/2 + (Math.random()-0.5)*60;
+          ctx.lineTo(mx, my);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = '#fff';
+          ctx.shadowBlur = 25;
+          ctx.shadowColor = col;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+
+        // Gradient line
+        const grad = ctx.createLinearGradient(p1.x, p1.y, p2.x, p2.y);
+        grad.addColorStop(0, themes[currentTheme](time, idx, 5));
+        grad.addColorStop(0.5, themes[currentTheme](time, idx+1, 5));
+        grad.addColorStop(1, themes[currentTheme](time, idx+2, 5));
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = col;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      });
+
+      // Mandala between hands
+      const allTips = [
+        ...FINGER_TIPS.map(t => toCanvas(h1[t])),
+        ...FINGER_TIPS.map(t => toCanvas(h2[t]))
+      ];
+      const cx = allTips.reduce((s,p)=>s+p.x,0)/allTips.length;
+      const cy = allTips.reduce((s,p)=>s+p.y,0)/allTips.length;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(time * 0.6);
+      ctx.beginPath();
+      for (let i=0;i<10;i++) {
+        const t1={x:allTips[i].x-cx,y:allTips[i].y-cy};
+        const t2={x:allTips[(i+3)%10].x-cx,y:allTips[(i+3)%10].y-cy};
+        ctx.moveTo(t1.x,t1.y);
+        ctx.lineTo(t2.x,t2.y);
+      }
+      ctx.strokeStyle='rgba(255,255,255,0.18)';
+      ctx.lineWidth=1;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Draw ZAIB watermark on hands center
+    if (currentHands[0]) {
+      const wrist = toCanvas(currentHands[0][0]);
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.15;
+      ctx.font = "700 14px 'Bebas Neue', sans-serif";
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffd60a';
+      ctx.fillText('ZAIB_BALOCH', wrist.x, wrist.y + 40);
+      ctx.restore();
+    }
+
+    detectGestures();
+  }
+
+  uiHands.textContent = currentHands.length;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// ============================================================
+// MEDIAPIPE
+// ============================================================
+function initMediaPipe() {
+  const hands = new Hands({locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  hands.setOptions({maxNumHands:2, modelComplexity:1, minDetectionConfidence:0.7, minTrackingConfidence:0.7});
+  hands.onResults(results => {
+    if (!audioCtx) return;
+    if (currentHands.length>0 && results.multiHandLandmarks?.length>0) {
+      const oldP = currentHands[0][8], newP = results.multiHandLandmarks[0][8];
+      handVel = oldP && newP ? dist(oldP, newP) : 0;
+    } else { handVel = 0; }
+    currentHands = results.multiHandLandmarks || [];
+    updateHum(currentHands);
+  });
+  const cam = new Camera(videoEl, {
+    onFrame: async () => await hands.send({image: videoEl}),
+    width:1280, height:720, facingMode:'user'
+  });
+  cam.start();
+}
+</script>
+</body>
+</html>
